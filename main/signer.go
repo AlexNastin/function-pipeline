@@ -8,53 +8,60 @@ import (
 )
 
 func main() {
-	ExecutePipeline()
+	inputData := []int{0, 1}
+	hashSignJobs := []job{
+		job(func(in, out chan interface{}) {
+			defer close(out)
+			for _, fibNum := range inputData {
+				out <- fibNum
+			}
+		}),
+		job(SingleHash),
+		job(MultiHash),
+		job(CombineResults),
+		job(func(in, out chan interface{}) {
+			dataRaw := <-in
+			data, _ := dataRaw.(string)
+			testResult := data
+			fmt.Print(testResult)
+		}),
+	}
+
+	ExecutePipeline(hashSignJobs...)
 }
 
 func ExecutePipeline(jobs ...job) {
 	waitGroup := &sync.WaitGroup{}
 
-	bufferSize := 2
+	channels := make([]chan interface{}, len(jobs)+1)
 
-	channel1 := createChannel(bufferSize)
-	channel2 := createChannel(bufferSize)
-	channel3 := createChannel(bufferSize)
-	channel4 := createChannel(bufferSize)
+	for i := 0; i < len(jobs)+1; i++ {
+		channels[i] = createChannel()
+	}
 
-	waitGroup.Add(1)
-	go executePipeline(waitGroup, channel1, channel2, SingleHash)
-	waitGroup.Add(1)
-	go executePipeline(waitGroup, channel2, channel3, MultiHash)
-	waitGroup.Add(1)
-	go executePipeline(waitGroup, channel3, channel4, CombineResults)
+	for idx, job := range jobs {
+		waitGroup.Add(1)
+		go executePipeline(waitGroup, channels[idx], channels[idx+1], job)
+	}
 
-	channel1 <- 0
-	channel1 <- 1
-
-	close(channel1)
-	finalResult := <-channel4
-
-	fmt.Println("CombineResults", finalResult)
 	waitGroup.Wait()
 }
 
-func executePipeline(waitGroup *sync.WaitGroup, channel1 chan interface{}, channel2 chan interface{}, jobHash job) {
+func executePipeline(waitGroup *sync.WaitGroup, in chan interface{}, out chan interface{}, jobHash job) {
 	defer waitGroup.Done()
-	jobHash(channel1, channel2)
+	defer close(out)
+	jobHash(in, out)
 }
 
 func SingleHash(in, out chan interface{}) {
-	defer close(out)
 	for data := range in {
 		dataString := strconv.Itoa(data.(int))
 		hash := DataSignerCrc32(dataString) + "~" + DataSignerCrc32(DataSignerMd5(dataString))
 		out <- hash
 	}
-
 }
 
 func MultiHash(in, out chan interface{}) {
-	defer close(out)
 	for data := range in {
 		dataString := data.(string)
 		buffer := make([]string, 6)
@@ -72,7 +79,6 @@ func MultiHash(in, out chan interface{}) {
 }
 
 func CombineResults(in, out chan interface{}) {
-	defer close(out)
 	data := make([]string, 0)
 	for value := range in {
 		data = append(data, value.(string))
@@ -90,6 +96,6 @@ func CombineResults(in, out chan interface{}) {
 	out <- finalResult
 }
 
-func createChannel(bufferSize int) chan interface{} {
+func createChannel() chan interface{} {
 	return make(chan interface{})
 }
