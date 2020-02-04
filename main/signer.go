@@ -58,7 +58,7 @@ func MultiHash(in, out chan interface{}) {
 	for data := range in {
 		dataString := data.(string)
 		buffer := make([]string, 6)
-		for i := 0; i < 5; i++ {
+		for i := 0; i <= 5; i++ {
 			formatInt := strconv.Itoa(i)
 			number := DataSignerCrc32(formatInt + dataString)
 			buffer = append(buffer, number)
