@@ -81,10 +81,16 @@ func asyncIterationMultiHash(data interface{}, out chan interface{}, waitGroupMu
 	defer waitGroupMultiHash.Done()
 	dataString := data.(string)
 	buffer := make([]string, 6)
+	bufferChannels := make([]chan string, 6)
 	for i := 0; i <= 5; i++ {
 		formatInt := strconv.Itoa(i)
 		number := hashCrc32(formatInt + dataString)
-		buffer = append(buffer, <-number)
+		bufferChannels = append(bufferChannels, number)
+	}
+	for _, value := range bufferChannels {
+		if value != nil {
+			buffer = append(buffer, <-value)
+		}
 	}
 	finalResult := ""
 	for idx := range buffer {
